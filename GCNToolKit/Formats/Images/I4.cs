@@ -2,7 +2,7 @@
 {
     public class I4
     {
-        private static int[] DecodeI4Routine(byte[] I4Data, int Width, int Height)
+        private static int[] DecodeI4Routine(byte[] I4Data, int Width, int Height, bool Unswizzle = true)
         {
             int[] GrayscaleData = new int[I4Data.Length * 2];
             for (int i = 0; i < I4Data.Length; i++)
@@ -15,7 +15,7 @@
                 GrayscaleData[idx + 1] = (0xFF << 24) | (RightPixelValue << 16) | (RightPixelValue << 8) | RightPixelValue;
             }
 
-            return BlockFormat.Decode(GrayscaleData, Width, Height, 8, 8);
+            return Unswizzle ? BlockFormat.Decode(GrayscaleData, Width, Height, 8, 8) : GrayscaleData;
         }
 
         private static byte[] EncodeI4Routine(int[] ImageData, int Width, int Height)
@@ -35,9 +35,9 @@
             return PackedI4Data;
         }
 
-        public static int[] DecodeI4(byte[] I4Data, int Width, int Height)
+        public static int[] DecodeI4(byte[] I4Data, int Width, int Height, bool Unswizzle = true)
         {
-            return DecodeI4Routine(I4Data, Width, Height);
+            return DecodeI4Routine(I4Data, Width, Height, Unswizzle);
         }
 
         public static byte[] EncodeI4(int[] ImageData, int Width, int Height)

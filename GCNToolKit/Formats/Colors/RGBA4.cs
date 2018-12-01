@@ -6,16 +6,26 @@
     public static class RGBA4
     {
         /// <summary>
+        /// Gets the average of a byte's nibbles.
+        /// </summary>
+        /// <param name="B">The byte to get the average of.</param>
+        /// <returns>The average of the nibbles.</returns>
+        internal static byte GetNibbleAverage(byte B)
+        {
+            return (byte)(((B & 0x0F) + ((B & 0xF0) >> 4)) / 2);
+        }
+
+        /// <summary>
         /// Converts an ARGB8 Pixel's component values to a RGBA4 value
         /// </summary>
         /// <param name="R">The ARGB8 Red Component</param>
         /// <param name="G">The ARGB8 Green Component</param>
         /// <param name="B">The ARGB8 Blue Component</param>
-        /// /// <param name="A">The ARGB8 Alpha Component</param>
+        /// <param name="A">The ARGB8 Alpha Component</param>
         /// <returns>RGBA4 Pixel</returns>
         public static ushort ToRGBA4(byte R, byte G, byte B, byte A)
         {
-            return (ushort)(((R & 0xF0) << 8) | ((G & 0xF0) << 4) | (B & 0xF0) | (A & 0xF0) >> 4);
+            return (ushort)((GetNibbleAverage(R) << 12) | (GetNibbleAverage(G) << 8) | (GetNibbleAverage(B) << 4) | GetNibbleAverage(A) << 0);
         }
 
         /// <summary>
@@ -46,9 +56,9 @@
         public static uint ToARGB8(ushort RGBA4)
         {
             int R = (RGBA4 & 0xF000) >> 12;
-            int G = (RGBA4 & 0xF00) >> 8;
-            int B = (RGBA4 & 0xF0) >> 4;
-            int A = (RGBA4 & 0xF);
+            int G = (RGBA4 & 0x0F00) >>  8;
+            int B = (RGBA4 & 0x00F0) >>  4;
+            int A = (RGBA4 & 0x000F) >>  0;
 
             R |= (R << 4);
             G |= (G << 4);

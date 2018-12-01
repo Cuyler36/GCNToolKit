@@ -7,67 +7,64 @@ namespace GCNToolKit.Formats
 {
     public static class Yaz0
     {
-        public static byte[] Decompress(byte[] EncodedFileData)
+        /// <summary>
+        /// Verifies that the supplied byte array is Yaz0 compressed.
+        /// </summary>
+        /// <param name="Data">The Yaz0 compressed data array</param>
+        /// <returns>IsDataYaz0Compressed</returns>
+        public static bool IsYaz0(byte[] Data)
+            => Data.Length > 0x10 && Encoding.ASCII.GetString(Data, 0, 4).Equals("Yaz0");
+
+        /// <summary>
+        /// Decompresses Yaz0 compressed data.
+        /// </summary>
+        /// <param name="Data">The Yaz0 compressed data array</param>
+        /// <returns>The decompressed data</returns>
+        public static byte[] Decompress(byte[] Data)
         {
-            if (Encoding.ASCII.GetString(EncodedFileData, 0, 4) == "Yaz0")
+            if (!IsYaz0(Data))
             {
-                int DecompressedFileSize = BitConverter.ToInt32(EncodedFileData, 4).Reverse();
-                EncodedFileData = EncodedFileData.Skip(0x10).ToArray();
-                byte[] DecompressedFileData = new byte[DecompressedFileSize];
+                throw new ArgumentException("The supplied data does not appear to be Yaz0 compressed!");
+            }
 
-                int Read_Position = 0;
-                int Write_Position = 0;
-                uint ValidBitCount = 0;
-                byte CurrentCodeByte = 0;
+            uint Size = (uint)(Data[4] << 24 | Data[5] << 16 | Data[6] << 8 | Data[7]);
+            byte[] Output = new byte[Size];
+            int ReadOffset = 16;
+            int OutputOffset = 0;
 
-                while (Write_Position < DecompressedFileSize)
+            while (true)
+            {
+                byte Bitmap = Data[ReadOffset++];
+                for (int i = 0; i < 8; i++)
                 {
-                    if (ValidBitCount == 0)
+                    if ((Bitmap & 0x80) != 0)
                     {
-                        CurrentCodeByte = EncodedFileData[Read_Position++];
-                        ValidBitCount = 8;
-                    }
-
-                    if ((CurrentCodeByte & 0x80) != 0)
-                    {
-                        DecompressedFileData[Write_Position++] = EncodedFileData[Read_Position++];
+                        Output[OutputOffset++] = Data[ReadOffset++];
                     }
                     else
                     {
-                        byte Byte1 = EncodedFileData[Read_Position];
-                        byte Byte2 = EncodedFileData[Read_Position + 1];
-                        Read_Position += 2;
-
-                        uint Dist = (uint)(((Byte1 & 0xF) << 8) | Byte2);
-                        uint CopySource = (uint)(Write_Position - (Dist + 1));
-
-                        uint Byte_Count = (uint)(Byte1 >> 4);
-                        if (Byte_Count == 0)
+                        byte b = Data[ReadOffset++];
+                        int OffsetAdjustment = ((b & 0xF) << 8 | Data[ReadOffset++]) + 1;
+                        int Length = (b >> 4) + 2;
+                        if (Length == 2)
                         {
-                            Byte_Count = (uint)(EncodedFileData[Read_Position++] + 0x12);
-                        }
-                        else
-                        {
-                            Byte_Count += 2;
+                            Length = Data[ReadOffset++] + 0x12;
                         }
 
-                        for (int i = 0; i < Byte_Count; ++i)
+                        for (int j = 0; j < Length; j++)
                         {
-                            DecompressedFileData[Write_Position++] = DecompressedFileData[CopySource++];
+                            Output[OutputOffset] = Output[OutputOffset - OffsetAdjustment];
+                            OutputOffset++;
                         }
                     }
 
-                    CurrentCodeByte <<= 1;
-                    ValidBitCount -= 1;
-                }
+                    Bitmap <<= 1;
 
-                return DecompressedFileData;
-            }
-            else
-            {
-                System.Windows.MessageBox.Show("The selected file does not to be a Yaz0 compressed file!", "Yaz0 Decompress Error",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
-                return null;
+                    if (OutputOffset >= Size)
+                    {
+                        return Output;
+                    }
+                }
             }
         }
 

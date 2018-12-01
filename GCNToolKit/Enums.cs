@@ -30,6 +30,7 @@
         Repeat = 1,
         Mirrored_Repeat = 2
     }
+
     public enum Filter_Type : byte
     {
         // Min & Mag Filter
