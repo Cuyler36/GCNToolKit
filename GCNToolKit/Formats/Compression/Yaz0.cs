@@ -8,47 +8,59 @@ namespace GCNToolKit.Formats
     public static class Yaz0
     {
         /// <summary>
-        /// Verifies that the supplied byte array is Yaz0 compressed.
+        /// Verifies that the supplied byte array is SZP compressed.
         /// </summary>
-        /// <param name="Data">The Yaz0 compressed data array</param>
-        /// <returns>IsDataYaz0Compressed</returns>
-        public static bool IsYaz0(byte[] Data)
-            => Data.Length > 0x10 && Encoding.ASCII.GetString(Data, 0, 4).Equals("Yaz0");
+        /// <param name="data">The SZP compressed data array</param>
+        /// <returns>isCompressed</returns>
+        public static bool IsYaz0(byte[] data)
+            => data.Length > 0x10 && Encoding.ASCII.GetString(data, 0, 4).Equals("Yaz0");
 
         /// <summary>
-        /// Decompresses Yaz0 compressed data.
+        /// Verifies that a given <see cref="Stream"/> is Yaz0 compressed.
         /// </summary>
-        /// <param name="Data">The Yaz0 compressed data array</param>
-        /// <returns>The decompressed data</returns>
-        public static byte[] Decompress(byte[] Data)
+        /// <param name="stream">The stream to check</param>
+        /// <returns>IsCompressed</returns>
+        public static bool IsYaz0(Stream stream)
         {
-            if (!IsYaz0(Data))
+            var buffer = new byte[4];
+            stream.Read(buffer, 0, 4);
+            return stream.Length > 0x10 && Encoding.ASCII.GetString(buffer) == "Yaz0";
+        }
+
+        /// <summary>
+        /// Decompresses SZS compressed data.
+        /// </summary>
+        /// <param name="data">The SZS compressed data array</param>
+        /// <returns>The decompressed data</returns>
+        public static byte[] Decompress(in byte[] data)
+        {
+            if (!IsYaz0(data))
             {
                 throw new ArgumentException("The supplied data does not appear to be Yaz0 compressed!");
             }
 
-            uint Size = (uint)(Data[4] << 24 | Data[5] << 16 | Data[6] << 8 | Data[7]);
+            uint Size = (uint)(data[4] << 24 | data[5] << 16 | data[6] << 8 | data[7]);
             byte[] Output = new byte[Size];
             int ReadOffset = 16;
             int OutputOffset = 0;
 
             while (true)
             {
-                byte Bitmap = Data[ReadOffset++];
+                byte Bitmap = data[ReadOffset++];
                 for (int i = 0; i < 8; i++)
                 {
                     if ((Bitmap & 0x80) != 0)
                     {
-                        Output[OutputOffset++] = Data[ReadOffset++];
+                        Output[OutputOffset++] = data[ReadOffset++];
                     }
                     else
                     {
-                        byte b = Data[ReadOffset++];
-                        int OffsetAdjustment = ((b & 0xF) << 8 | Data[ReadOffset++]) + 1;
+                        byte b = data[ReadOffset++];
+                        int OffsetAdjustment = ((b & 0xF) << 8 | data[ReadOffset++]) + 1;
                         int Length = (b >> 4) + 2;
                         if (Length == 2)
                         {
-                            Length = Data[ReadOffset++] + 0x12;
+                            Length = data[ReadOffset++] + 0x12;
                         }
 
                         for (int j = 0; j < Length; j++)
@@ -133,16 +145,12 @@ namespace GCNToolKit.Formats
             return byteCount;
         }
 
-        /*
-         * Compresses a file using Yaz0 compression
-         * 
-         * Params:
-         *  @Data = data array to compress
-         * 
-         * Returns:
-         *  @byte[] CompressedData = a byte array containing a file header ["Yaz0", Decompress Size] and the compressed data
-         */
-        public static byte[] Compress(byte[] Data)
+        /// <summary>
+        /// Compresses a given byte array using SZS compression.
+        /// </summary>
+        /// <param name="data">The data to compress</param>
+        /// <returns>compressedData</returns>
+        public static byte[] Compress(in byte[] data)
         {
             int OutputBufferSize = 0;
             int SourcePosition = 0;
@@ -156,16 +164,16 @@ namespace GCNToolKit.Formats
             uint MatchPosition = 0;
             byte A = 0, B = 0, C = 0;
 
-            while (SourcePosition < Data.Length)
+            while (SourcePosition < data.Length)
             {
                 ByteCount = 0;
                 MatchPosition = 0;
 
-                ByteCount = NintendoEncode(Data, Data.Length, SourcePosition, ref MatchPosition);
+                ByteCount = NintendoEncode(data, data.Length, SourcePosition, ref MatchPosition);
 
                 if (ByteCount < 3)
                 {
-                    OutputBuffer[WritePosition] = Data[SourcePosition];
+                    OutputBuffer[WritePosition] = data[SourcePosition];
                     WritePosition++;
                     SourcePosition++;
                     CurrentCodeByte |= (byte)(0x80 >> (int)ValidBitCount);
@@ -231,7 +239,7 @@ namespace GCNToolKit.Formats
 
             byte[] FileData = new byte[OutputStream.Length + 0x10];
             Encoding.ASCII.GetBytes("Yaz0").CopyTo(FileData, 0);
-            BitConverter.GetBytes(Data.Length).Reverse().ToArray().CopyTo(FileData, 4);
+            BitConverter.GetBytes(data.Length).Reverse().ToArray().CopyTo(FileData, 4);
             OutputStream.ToArray().CopyTo(FileData, 0x10);
 
             return FileData;

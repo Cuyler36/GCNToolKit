@@ -1,8 +1,10 @@
-﻿namespace GCNToolKit.Formats.Images
+﻿using System.Drawing;
+
+namespace GCNToolKit.Formats.Images
 {
     public static class IA4
     {
-        private static int[] DecodeIA4Routine(byte[] IA4Data, int Width, int Height, bool Unswizzle = true)
+        private static int[] DecodeIA4Routine(byte[] IA4Data, int Width, int Height, Color Color, bool Unswizzle = true)
         {
             int[] GrayscaleData = new int[IA4Data.Length];
             for (int i = 0; i < GrayscaleData.Length; i++)
@@ -13,12 +15,18 @@
                 GrayscaleData[i] = (LeftPixelValue << 24) | (RightPixelValue << 16) | (RightPixelValue << 8) | RightPixelValue;
             }
 
-            return Unswizzle ? BlockFormat.Decode(GrayscaleData, Width, Height, 8, 4) : GrayscaleData;
+            // Apply color to decoded pixel data.
+            for (var i = 0; i < GrayscaleData.Length; i++)
+            {
+
+            }
+
+            return Unswizzle ? SwizzleUtil.Unswizzle(GrayscaleData, Width, Height, 8, 4) : GrayscaleData;
         }
 
         private static byte[] EncodeIA4Routine(int[] ImageData, int Width, int Height)
         {
-            ImageData = BlockFormat.Encode(ImageData, Width, Height, 8, 4);
+            ImageData = SwizzleUtil.Swizzle(ImageData, Width, Height, 8, 4);
             byte[] PackedIA4Data = new byte[ImageData.Length];
 
             for (int i = 0; i < PackedIA4Data.Length; i++)
@@ -32,9 +40,9 @@
             return PackedIA4Data;
         }
 
-        public static int[] DecodeIA4(byte[] IA4Data, int Width, int Height, bool Unswizzle = true)
+        public static int[] DecodeIA4(byte[] IA4Data, int Width, int Height, Color Color, bool Unswizzle = true)
         {
-            return DecodeIA4Routine(IA4Data, Width, Height, Unswizzle);
+            return DecodeIA4Routine(IA4Data, Width, Height, Color, Unswizzle);
         }
 
         public static byte[] EncodeIA4(int[] ImageData, int Width, int Height)

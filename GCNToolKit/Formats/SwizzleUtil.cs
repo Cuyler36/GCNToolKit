@@ -1,8 +1,8 @@
 ﻿namespace GCNToolKit.Formats
 {
-    public static class BlockFormat
+    public static class SwizzleUtil
     {
-        public static T[] Decode<T>(T[] Input, int Width, int Height, int PixelsPerBlockW = 8, int PixelsPerBlockH = 8)
+        public static T[] Unswizzle<T>(T[] Input, int Width, int Height, int PixelsPerBlockW = 8, int PixelsPerBlockH = 8)
         {
             if (Width * Height > Input.Length)
             {
@@ -35,7 +35,7 @@
             return OutputBuffer;
         }
 
-        public static T[] Encode<T>(T[] Input, int Width, int Height, int PixelsPerBlockW = 8, int PixelsPerBlockH = 8)
+        public static T[] Swizzle<T>(T[] Input, int Width, int Height, int PixelsPerBlockW = 8, int PixelsPerBlockH = 8)
         {
             if (Width * Height > Input.Length)
             {

@@ -44,4 +44,14 @@
         Linear_Mipmap_Nearest = 5,
         Linear_Mipmap_Linear = 6
     }
+
+    public enum ColorFormat : byte
+    {
+        IA,
+        RGB565,
+        RGB5A3,
+        RGBA4,
+        RGB5A1,
+        RGBA8
+    }
 }

@@ -1,23 +1,169 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace GCNToolKit.Formats
 {
-    public static class Yay0
+    public static unsafe class Yay0
     {
-        public static byte[] Decompress(byte[] CompressedData)
-        {
-            if (Encoding.ASCII.GetString(CompressedData, 0, 4).Equals("Yay0"))
-            {
-                uint DecompressedSize = BitConverter.ToUInt32(CompressedData, 4).Reverse();
-                uint CountOffset = BitConverter.ToUInt32(CompressedData, 8).Reverse();
-                uint DataOffset = BitConverter.ToUInt32(CompressedData, 12).Reverse();
+        public static bool IsYay0(in byte[] data) => data?.Length > 0x10 && Encoding.ASCII.GetString(data, 0, 4) == "Yay0";
 
-                CompressedData = CompressedData.Skip(0x10).ToArray();
+        /// <summary>
+        /// Compresses a given byte array using SZP compression.
+        /// </summary>
+        /// <param name="data">The byte array to compress</param>
+        /// <returns>compressedData</returns>
+        public static byte[] Compress(in byte[] data)
+        {
+            const int OFSBITS = 12;
+            int decPtr;
+
+            // masks buffer
+            uint maskMaxSize = (uint)(data.Length + 32) >> 3; // 1 bit per byte
+            uint maskBitCount = 0, mask = 0;
+            uint[] maskBuffer = new uint[maskMaxSize / 4];
+            int maskPtr;
+
+            // links buffer
+            uint linkMaxSize = (uint)data.Length / 2;
+            ushort linkOffset = 0;
+            ushort[] linkBuffer = new ushort[linkMaxSize];
+            int linkPtr;
+            ushort minCount = 3, maxCount = 273;
+
+            // chunks buffer
+            uint chunkMaxSize = (uint)data.Length;
+            byte[] chunkBuffer = new byte[chunkMaxSize];
+            int chunkPtr;
+
+            int windowPtr;
+            int windowLen = 0, length, maxlen;
+
+            //set pointers
+            decPtr = 0;
+            maskPtr = 0;
+            linkPtr = 0;
+
+            chunkPtr = 0;
+            windowPtr = decPtr;
+
+            // start enconding
+            while (decPtr < data.Length)
+            {
+
+                if (windowLen >= (1 << OFSBITS))
+                {
+                    windowLen = windowLen - (1 << OFSBITS);
+                    windowPtr = decPtr - windowLen;
+                }
+
+                if ((data.Length - decPtr) < maxCount)
+                    maxCount = (ushort)(data.Length - decPtr);
+
+                // Scan through the window.
+                maxlen = 0;
+                for (int i = 0; i < windowLen; i++)
+                {
+                    for (length = 0; length < (windowLen - i) && length < maxCount; length++)
+                    {
+                        if (data[decPtr + length] != data[windowPtr + length + i]) break;
+                    }
+                    if (length > maxlen)
+                    {
+                        maxlen = length;
+                        linkOffset = (ushort)(windowLen - i);
+                    }
+                }
+                length = maxlen;
+
+                mask <<= 1;
+                if (length >= minCount)      // Add Link
+                {
+                    ushort link = (ushort)((linkOffset - 1) & 0x0FFF);
+
+                    if (length < 18)
+                    {
+                        link |= (ushort)((length - 2) << 12);
+                    }
+                    else
+                    {
+                        // store current count as a chunk.
+                        chunkBuffer[chunkPtr++] = (byte)(length - 18);
+                    }
+
+                    linkBuffer[linkPtr++] = link.Reverse();
+                    decPtr += length;
+                    windowLen += length;
+                }
+                else                        // Add single byte, increase Window.
+                {
+                    chunkBuffer[chunkPtr++] = data[decPtr++];
+                    windowLen++;
+                    mask |= 1;
+                }
+
+                maskBitCount++;
+                if (maskBitCount == 32)
+                {
+                    // store current mask
+                    maskBuffer[maskPtr] = mask.Reverse();
+                    maskPtr++;
+                    maskBitCount = 0;
+                }
+            }
+
+            //flush mask 
+            if (maskBitCount > 0)
+            {
+                mask <<= (int)(32 - maskBitCount);
+                // store current mask
+                maskBuffer[maskPtr] = mask.Reverse();
+                maskPtr++;
+            }
+
+            // now join all pieces
+            uint maskSize = (uint)maskPtr * sizeof(uint);
+            uint linkSize = (uint)linkPtr * sizeof(ushort);
+            uint chunkSize = (uint)chunkPtr * sizeof(byte);
+
+            uint encodedSize = 0x10 + maskSize + linkSize + chunkSize;
+            byte[] buffer = new byte[encodedSize];
+            using (var writer = new BinaryWriter(new MemoryStream(buffer)))
+            {
+                uint hdrLinkOffset = 0x10 + maskSize;
+                uint hdrChunkOffset = hdrLinkOffset + linkSize;
+                // Write header
+                writer.Write(Encoding.ASCII.GetBytes("Yay0"));
+                writer.Write(((uint)data.Length).Reverse());
+                writer.Write(hdrLinkOffset.Reverse());
+                writer.Write(hdrChunkOffset.Reverse());
+
+                // Write data
+                Buffer.BlockCopy(maskBuffer, 0, buffer, 0x10, (int)maskSize);
+                Buffer.BlockCopy(linkBuffer, 0, buffer, (int)hdrLinkOffset, (int)linkSize);
+                Buffer.BlockCopy(chunkBuffer, 0, buffer, (int)hdrChunkOffset, (int)chunkSize);
+            }
+
+            return buffer;
+        }
+
+        /// <summary>
+        /// Decompresses a given byte buffer if it is compressed with SZP compression
+        /// </summary>
+        /// <param name="compressedData">The SZP compressed byte buffer</param>
+        /// <returns>decompressedData</returns>
+        public static byte[] Decompress(in byte[] compressedData)
+        {
+            if (IsYay0(compressedData))
+            {
+                uint DecompressedSize = BitConverter.ToUInt32(compressedData, 4).Reverse();
+                uint CountOffset = BitConverter.ToUInt32(compressedData, 8).Reverse();
+                uint DataOffset = BitConverter.ToUInt32(compressedData, 12).Reverse();
                 byte[] DecompressedFileData = new byte[DecompressedSize];
 
-                int CodePosition = 0;
+                int CodePosition = 0x10;
                 int Write_Position = 0;
                 uint ValidBitCount = 0;
                 byte CurrentCodeByte = 0;
@@ -26,14 +172,14 @@ namespace GCNToolKit.Formats
                 {
                     if (ValidBitCount == 0)
                     {
-                        CurrentCodeByte = CompressedData[CodePosition];
+                        CurrentCodeByte = compressedData[CodePosition];
                         ++CodePosition;
                         ValidBitCount = 8;
                     }
 
                     if ((CurrentCodeByte & 0x80) != 0)
                     {
-                        DecompressedFileData[Write_Position] = CompressedData[DataOffset];
+                        DecompressedFileData[Write_Position] = compressedData[DataOffset];
                         Write_Position++;
                         DataOffset++;
                     }
@@ -41,8 +187,8 @@ namespace GCNToolKit.Formats
                     {
                         try
                         {
-                            byte Byte1 = CompressedData[CountOffset];
-                            byte Byte2 = CompressedData[CountOffset + 1];
+                            byte Byte1 = compressedData[CountOffset];
+                            byte Byte2 = compressedData[CountOffset + 1];
                             CountOffset += 2;
 
                             uint Dist = (uint)(((Byte1 & 0xF) << 8) | Byte2);
@@ -51,7 +197,7 @@ namespace GCNToolKit.Formats
                             uint Byte_Count = (uint)(Byte1 >> 4);
                             if (Byte_Count == 0)
                             {
-                                Byte_Count = (uint)(CompressedData[DataOffset] + 0x12);
+                                Byte_Count = (uint)(compressedData[DataOffset] + 0x12);
                                 DataOffset++;
                             }
                             else
@@ -68,20 +214,21 @@ namespace GCNToolKit.Formats
                         }
                         catch (Exception e)
                         {
-                            System.Windows.MessageBox.Show(e.Message + "\n" + e.StackTrace);
+                            Console.WriteLine(e.Message + "\n" + e.StackTrace);
                             return null;
                         }
-                        CurrentCodeByte <<= 1;
-                        ValidBitCount -= 1;
                     }
 
-                    return DecompressedFileData;
+                    CurrentCodeByte <<= 1;
+                    ValidBitCount -= 1;
                 }
+
+                return DecompressedFileData;
             }
             else
             {
-                System.Windows.MessageBox.Show("The selected file does not to be a Yay0 compressed file!", "Yay0 Decompress Error",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                /*System.Windows.MessageBox.Show("The selected file does not to be a Yay0 compressed file!", "Yay0 Decompress Error",
+                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);*/
                 return null;
             }
 

@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using GCNToolKit.Formats.Colors;
+using GCNToolKit.Formats.Images;
 
 namespace GCNToolKit.Formats
 {
@@ -119,7 +120,7 @@ namespace GCNToolKit.Formats
             switch (Header.Image_Format)
             {
                 case ImageFormat.C4:
-                    Encoded_Data = Images.C4.EncodeC4(Imported_Data, Palette, Width, Height);
+                    Encoded_Data = Images.C4.EncodeC4(Imported_Data, Palette, Width, Height, ColorFormat.RGB5A3);
                     break;
                 case ImageFormat.C8:
                     Encoded_Data = Images.C8.EncodeC8(Imported_Data, Palette, Width, Height);
@@ -150,7 +151,7 @@ namespace GCNToolKit.Formats
                 }
 
                 // Decode Block Format
-                PixelData = BlockFormat.Decode(PixelData, Header.Width, Header.Height, 4, 4);
+                PixelData = SwizzleUtil.Unswizzle(PixelData, Header.Width, Header.Height, 4, 4);
 
                 Bitmap_Data = new byte[PixelData.Length * 4];
                 for (int i = 0, idx = 0; i < PixelData.Length; i++, idx += 4)
@@ -192,6 +193,31 @@ namespace GCNToolKit.Formats
                 }
                 switch (Header.Image_Format)
                 {
+                    case ImageFormat.I4:
+                        Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take(((Header.Width * Header.Height) + 1) / 2).ToArray();
+                        Buffer.BlockCopy(I4.DecodeI4(Image_Data, Header.Width, Header.Height), 0, Bitmap_Data, 0, Bitmap_Data.Length);
+                        break;
+
+                    case ImageFormat.I8:
+                        Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take(Header.Width * Header.Height).ToArray();
+                        Buffer.BlockCopy(I8.DecodeI8(Image_Data, Header.Width, Header.Height), 0, Bitmap_Data, 0, Bitmap_Data.Length);
+                        break;
+
+                    case ImageFormat.IA4:
+                        Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take(Header.Width * Header.Height).ToArray();
+                        Buffer.BlockCopy(IA4.DecodeIA4(Image_Data, Header.Width, Header.Height, Color.White), 0, Bitmap_Data, 0, Bitmap_Data.Length);
+                        break;
+
+                    case ImageFormat.IA8:
+                        Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take((Header.Width * Header.Height) * 2).ToArray();
+                        Buffer.BlockCopy(IA8.DecodeIA8(Image_Data, Header.Width, Header.Height), 0, Bitmap_Data, 0, Bitmap_Data.Length);
+                        break;
+
+                    case ImageFormat.C4:
+                        Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take((Header.Width * Header.Height) / 2).ToArray();
+                        Buffer.BlockCopy(C4.DecodeC4(Image_Data, Palette, Header.Width, Header.Height, (ColorFormat)Header.Palette_Format), 0, Bitmap_Data, 0, Bitmap_Data.Length);
+                        break;
+
                     case ImageFormat.C8:
                         Image_Data = Data.Skip((int)Header.Image_Data_Offset).Take(Header.Width * Header.Height).ToArray();
                         int Index = 0;
@@ -245,7 +271,7 @@ namespace GCNToolKit.Formats
         {
             try
             {
-                using (FileStream Stream = new FileStream(Location, FileMode.OpenOrCreate))
+                using (var Stream = File.Create(Location))
                 {
                     using (BinaryWriter Writer = new BinaryWriter(Stream))
                     {
@@ -279,9 +305,12 @@ namespace GCNToolKit.Formats
                         // Write Image Data
                         Writer.Write(Image_Data);
 
-                        // Write Palette Data
-                        for (int i = 0; i < Palette.Length; i++)
-                            Write(Palette[i]);
+                        if (Palette != null)
+                        {
+                            // Write Palette Data
+                            for (int i = 0; i < Palette.Length; i++)
+                                Write(Palette[i]);
+                        }
                     }
                 }
             }

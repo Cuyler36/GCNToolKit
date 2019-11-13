@@ -8,7 +8,7 @@ namespace GCNToolKit.Formats.Images
         {
             var dataOut = new int[width * height];
             var position = 0;
-            rgba16Data = BlockFormat.Decode(rgba16Data, width, height, 4, 4);
+            rgba16Data = SwizzleUtil.Unswizzle(rgba16Data, width, height, 4, 4);
 
             for (var y = 0; y < height; y++)
             {
@@ -36,7 +36,7 @@ namespace GCNToolKit.Formats.Images
                 }
             }
 
-            return BlockFormat.Encode(dataOut, width, height, 4, 4);
+            return SwizzleUtil.Swizzle(dataOut, width, height, 4, 4);
         }
     }
 }

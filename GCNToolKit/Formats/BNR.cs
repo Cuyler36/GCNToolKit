@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Text;
 using System.Drawing;
-using System.Windows.Media.Imaging;
 using GCNToolKit.Formats.Colors;
 using GCNToolKit.Utilities;
 
@@ -24,7 +23,6 @@ namespace GCNToolKit.Formats
         private int fileSize = 0x1960;
         private string magic = "BNR1";
         private Bitmap bannerBitmap;
-        private BitmapSource bannerImage;
 
         public char[] Magic;
         public byte[] Padding;
@@ -85,11 +83,6 @@ namespace GCNToolKit.Formats
                     Description = new char[0x80];
                     for (int i = 0; i < 0x80; i++)
                         Description[i] = (char)Data[0x18E0 + i];
-                }
-                else
-                {
-                    System.Windows.MessageBox.Show("The file does not appear to be a valid banner file! It cannot be opened.", "Banner File Error",
-                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
                 }
             }
         }
@@ -162,7 +155,6 @@ namespace GCNToolKit.Formats
             }
 
             bannerBitmap = BitmapUtilities.CreateBitmap(BitmapSourceData, 96, 32);
-            bannerImage = bannerBitmap.ToBitmapSource();
         }
 
         public void SetBannerImageData(ushort[] RGB5A3Pixels)
@@ -170,19 +162,9 @@ namespace GCNToolKit.Formats
             ImageData = EncodeBNRImage(RGB5A3Pixels);
         }
 
-        public BitmapSource GetBannerImage()
-        {
-            if (bannerImage == null)
-            {
-                CreateBannerImage();
-            }
-
-            return bannerImage;
-        }
-
         public Bitmap GetBannerImageBitmap()
         {
-            if (bannerImage == null)
+            if (bannerBitmap == null)
             {
                 CreateBannerImage();
             }
@@ -190,10 +172,10 @@ namespace GCNToolKit.Formats
             return bannerBitmap;
         }
 
-        public BitmapSource RefreshBannerImage()
+        public Bitmap  RefreshBannerImage()
         {
             CreateBannerImage();
-            return bannerImage;
+            return bannerBitmap;
         }
 
         public byte[] GetFileData()

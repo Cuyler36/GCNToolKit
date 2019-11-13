@@ -15,12 +15,14 @@
                 GrayscaleData[idx + 1] = (0xFF << 24) | (RightPixelValue << 16) | (RightPixelValue << 8) | RightPixelValue;
             }
 
-            return Unswizzle ? BlockFormat.Decode(GrayscaleData, Width, Height, 8, 8) : GrayscaleData;
+            return Unswizzle ? SwizzleUtil.Unswizzle(GrayscaleData, Width, Height, 8, 8) : GrayscaleData;
         }
 
-        private static byte[] EncodeI4Routine(int[] ImageData, int Width, int Height)
+        private static byte[] EncodeI4Routine(int[] ImageData, int Width, int Height, bool Swizzle = true)
         {
-            ImageData = BlockFormat.Encode(ImageData, Width, Height, 8, 8);
+            if (Swizzle)
+                ImageData = SwizzleUtil.Swizzle(ImageData, Width, Height, 8, 8);
+
             byte[] PackedI4Data = new byte[ImageData.Length / 2];
 
             // We're only taking the red channel here for re-encoding.
@@ -35,14 +37,14 @@
             return PackedI4Data;
         }
 
-        public static int[] DecodeI4(byte[] I4Data, int Width, int Height, bool Unswizzle = true)
+        public static int[] DecodeI4(byte[] i4Data, int width, int height, bool unswizzle = true)
         {
-            return DecodeI4Routine(I4Data, Width, Height, Unswizzle);
+            return DecodeI4Routine(i4Data, width, height, unswizzle);
         }
 
-        public static byte[] EncodeI4(int[] ImageData, int Width, int Height)
+        public static byte[] EncodeI4(int[] imageData, int width, int height, bool swizzle = true)
         {
-            return EncodeI4Routine(ImageData, Width, Height);
+            return EncodeI4Routine(imageData, width, height, swizzle);
         }
     }
 }
