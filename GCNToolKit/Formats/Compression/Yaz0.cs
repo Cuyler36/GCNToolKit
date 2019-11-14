@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace GCNToolKit.Formats
+namespace GCNToolKit.Formats.Compression
 {
     public static class Yaz0
     {

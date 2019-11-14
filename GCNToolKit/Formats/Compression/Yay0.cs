@@ -1,12 +1,11 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 
-namespace GCNToolKit.Formats
+namespace GCNToolKit.Formats.Compression
 {
-    public static unsafe class Yay0
+    public static class Yay0
     {
         public static bool IsYay0(in byte[] data) => data?.Length > 0x10 && Encoding.ASCII.GetString(data, 0, 4) == "Yay0";
 
@@ -227,12 +226,8 @@ namespace GCNToolKit.Formats
             }
             else
             {
-                /*System.Windows.MessageBox.Show("The selected file does not to be a Yay0 compressed file!", "Yay0 Decompress Error",
-                    System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);*/
                 return null;
             }
-
-            return null;
         }
     }
 }
