@@ -1,4 +1,5 @@
-﻿using System;
+﻿using GCNToolKit.Formats.Compression;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,7 +8,17 @@ using System.Threading.Tasks;
 
 namespace GCNToolKit.Formats
 {
-    public class RARC
+    // RARC Info:
+    // Nintendo Jsystem Memory Archive Implementation
+    // Works by generate a fake archive implementation in memory.
+    // Code can request "files" from the achive and they will be "loaded"
+    // Several types:
+    //    DVD-Archive: Loaded from DVD when file is request
+    //    Memory-Archive: Stored in RAM and copied to requested buffer
+    //    ARAM-Archive: Stored in ARAM and copied to requested buffer
+    //    Compressed-Archive: Stored in either RAM, ARAM, or both.
+    //      NOTE: Supposed to be able to decompress everything after the 0x20 byte long header, but there is a bug that causes a crash instead.
+    public sealed class RARC
     {
         private const int HeaderSize = 0x40;
         private const int NodeSize = 0x10;
@@ -17,30 +28,38 @@ namespace GCNToolKit.Formats
         public RARCHeader Header { get; internal set; }
         public Node[] Nodes { get; internal set; }
 
-        public RARC(byte[] Data, string Name)
+        /// <summary>
+        /// Creates an RARC virtual folder from data and an archive name.
+        /// </summary>
+        /// <param name="data">The RARC file data</param>
+        /// <param name="name">The name of the RARC archive</param>
+        public RARC(byte[] data, string name)
         {
-            FileName = Name;
-            Header = new RARCHeader(Data);
-            ReadNodes(Data);
+            FileName = name;
+            Header = new RARCHeader(data);
+            ReadNodes(data);
         }
 
         public sealed class RARCHeader
         {
             public char[] Identifier;
             public uint FileSize;
+            public uint HeaderSize;
+            public uint ArchiveInfoSize;
+            public uint DataSize; // Total size of data in file
             public uint Unknown1;
-            public uint DataOffset;
-            public uint Unknown2;
-            public uint Unknown3;
-            public uint Unknown4;
+            public uint CompressedDataSize; // Size of compressed data in file
             public uint Unknown5;
+
+            // Info Struct
             public uint NodeCount;
-            public uint Unknown6;
-            public uint Unknown7;
+            public uint InfoStructSize;
+            public uint NumFiles;
             public uint EntryOffset;
-            public uint Unknown8;
+            public uint StringTableSize;
             public uint StringTableOffset;
-            public uint Unknown9;
+            public ushort NumFiles2;
+            public ushort Unknown9;
             public uint Unknown10;
 
             public RARCHeader(byte[] Data)
@@ -52,19 +71,20 @@ namespace GCNToolKit.Formats
                     {
                         Identifier = FileIdentifier.ToCharArray();
                         FileSize = BitConverter.ToUInt32(Data, 4).Reverse();
-                        Unknown1 = BitConverter.ToUInt32(Data, 8).Reverse();
-                        DataOffset = BitConverter.ToUInt32(Data, 0xC).Reverse() + 0x20;
-                        Unknown2 = BitConverter.ToUInt32(Data, 0x10).Reverse();
-                        Unknown3 = BitConverter.ToUInt32(Data, 0x14).Reverse();
-                        Unknown4 = BitConverter.ToUInt32(Data, 0x18).Reverse();
+                        HeaderSize = BitConverter.ToUInt32(Data, 8).Reverse();
+                        ArchiveInfoSize = BitConverter.ToUInt32(Data, 0xC).Reverse() + 0x20;
+                        DataSize = BitConverter.ToUInt32(Data, 0x10).Reverse();
+                        Unknown1 = BitConverter.ToUInt32(Data, 0x14).Reverse();
+                        CompressedDataSize = BitConverter.ToUInt32(Data, 0x18).Reverse();
                         Unknown5 = BitConverter.ToUInt32(Data, 0x1C).Reverse();
                         NodeCount = BitConverter.ToUInt32(Data, 0x20).Reverse();
-                        Unknown6 = BitConverter.ToUInt32(Data, 0x24).Reverse();
-                        Unknown7 = BitConverter.ToUInt32(Data, 0x28).Reverse();
+                        InfoStructSize = BitConverter.ToUInt32(Data, 0x24).Reverse();
+                        NumFiles = BitConverter.ToUInt32(Data, 0x28).Reverse();
                         EntryOffset = BitConverter.ToUInt32(Data, 0x2C).Reverse() + 0x20;
-                        Unknown8 = BitConverter.ToUInt32(Data, 0x30).Reverse();
+                        StringTableSize = BitConverter.ToUInt32(Data, 0x30).Reverse();
                         StringTableOffset = BitConverter.ToUInt32(Data, 0x34).Reverse() + 0x20;
-                        Unknown9 = BitConverter.ToUInt32(Data, 0x38).Reverse();
+                        NumFiles2 = BitConverter.ToUInt16(Data, 0x38).Reverse();
+                        Unknown9 = BitConverter.ToUInt16(Data, 0x3A).Reverse();
                         Unknown10 = BitConverter.ToUInt32(Data, 0x3C).Reverse();
                     }
                 }
@@ -109,6 +129,9 @@ namespace GCNToolKit.Formats
 
             /// <summary>Node index representing the subdirectory. Will only be non-zero if IsDirectory is true.</summary>
             public uint SubDirIndex { get; internal set; }
+
+            // True if the data resides in area that is marked compressed
+            public bool IsMarkedCompressed { get; internal set; }
 
             /// <summary>Whether or not this entry is a directory.</summary>
             public bool IsDirectory()
@@ -167,53 +190,65 @@ namespace GCNToolKit.Formats
                     }
                     else
                     {
-                        node.Entries[i].Data = Data.Skip((int)(Header.DataOffset + EntryDataOffset)).Take((int)DataSize).ToArray();
+                        node.Entries[i].Data = Data.Skip((int)(Header.ArchiveInfoSize + EntryDataOffset)).Take((int)DataSize).ToArray();
+                        node.Entries[i].IsMarkedCompressed = EntryDataOffset < Header.CompressedDataSize;
                     }
                 }
             }
         }
 
-        public void Dump(string RootPath)
+        public void Dump(string rootPath, bool decompressFiles = true)
         {
-            if (!Directory.Exists(RootPath))
+            if (!Directory.Exists(rootPath))
             {
                 throw new ArgumentException("The RootPath must be an existing folder!");
             }
 
-            string Path = RootPath + "\\" + FileName;
-            Directory.CreateDirectory(Path);
+            string path = rootPath + "\\" + FileName;
+            Directory.CreateDirectory(path);
             foreach (Node n in Nodes)
             {
-                DumpNode(Path, n);
-                Path += "\\" + n.Name; // Not sure about this
+                DumpNode(path, n, decompressFiles);
+                path += "\\" + n.Name;
             }
         }
 
-        internal void DumpNode(string RootPath, Node CurrentNode)
+        internal void DumpNode(string rootPath, Node currentNode, bool decompressFiles)
         {
-            if (!Directory.Exists(RootPath))
+            if (!Directory.Exists(rootPath))
             {
                 throw new ArgumentException("The RootPath must be an existing folder!");
             }
 
-            string Path = RootPath + "\\" + CurrentNode.Name;
+            string path = rootPath + "\\" + currentNode.Name;
 
-            Directory.CreateDirectory(RootPath + "\\" + CurrentNode.Name);
-            foreach (Entry FileEntry in CurrentNode.Entries)
+            Directory.CreateDirectory(rootPath + "\\" + currentNode.Name);
+            foreach (Entry FileEntry in currentNode.Entries)
             {
                 if (FileEntry.IsDirectory())
                 {
                     if (FileEntry.Name != "." && FileEntry.Name != "..")
                     {
-                        Path = Path + "\\" + FileEntry.Name;
-                        Directory.CreateDirectory(Path);
+                        path = path + "\\" + FileEntry.Name;
                     }
                 }
                 else
                 {
-                    using (var Stream = File.Create(Path + "\\" + FileEntry.Name))
+                    var data = FileEntry.Data;
+                    if (decompressFiles && FileEntry.IsMarkedCompressed)
                     {
-                        Stream.Write(FileEntry.Data, 0, FileEntry.Data.Length);
+                        if (Yaz0.IsYaz0(data))
+                        {
+                            data = Yaz0.Decompress(data);
+                        }
+                        else if (Yay0.IsYay0(data))
+                        {
+                            data = Yay0.Decompress(data);
+                        }
+                    }
+                    using (var Stream = File.Create(path + "\\" + FileEntry.Name))
+                    {
+                        Stream.Write(data, 0, data.Length);
                         Stream.Flush();
                         Stream.Close();
                     }
@@ -233,7 +268,7 @@ namespace GCNToolKit.Formats
                 StringBytes.Add(Data[i]);
             }
 
-            return Encoding.GetEncoding("shift_jis").GetString(StringBytes.ToArray());
+            return Encoding.ASCII.GetString(StringBytes.ToArray());
         }
     }
 }
