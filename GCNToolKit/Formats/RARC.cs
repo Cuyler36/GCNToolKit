@@ -120,6 +120,8 @@ namespace GCNToolKit.Formats
             public ushort NameOffset { get; internal set; }
             /// <summary>File/subdirectory name.</summary>
             public string Name { get; internal set; }
+            public uint DataOffset { get; internal set; }
+            public uint Size { get; internal set; }
             /// <summary>Data bytes. If this entry is a directory, it will be the node index.</summary>
             public byte[] Data { get; internal set; }
             /// <summary>Always zero.</summary>
@@ -177,12 +179,14 @@ namespace GCNToolKit.Formats
                         Type = Data[EntryOffset + 4],
                         Padding = Data[EntryOffset + 5],
                         NameOffset = BitConverter.ToUInt16(Data, EntryOffset + 6).Reverse(),
+                        DataOffset = BitConverter.ToUInt32(Data, EntryOffset + 8).Reverse(),
+                        Size = BitConverter.ToUInt32(Data, EntryOffset + 0xC).Reverse(),
                         ZeroPadding = BitConverter.ToUInt32(Data, EntryOffset + 0x10).Reverse()
                     };
 
                     node.Entries[i].Name = ReadStringTableString(Data, node.Entries[i].NameOffset);
-                    uint EntryDataOffset = BitConverter.ToUInt32(Data, EntryOffset + 8).Reverse();
-                    uint DataSize = BitConverter.ToUInt32(Data, EntryOffset + 0xC).Reverse();
+                    uint EntryDataOffset = node.Entries[i].DataOffset;
+                    uint DataSize = node.Entries[i].Size;
 
                     if (node.Entries[i].IsDirectory())
                     {
@@ -206,30 +210,20 @@ namespace GCNToolKit.Formats
 
             string path = rootPath + "\\" + FileName;
             Directory.CreateDirectory(path);
-            foreach (Node n in Nodes)
-            {
-                DumpNode(path, n, decompressFiles);
-                path += "\\" + n.Name;
-            }
+            DumpNode(path, Nodes[0], decompressFiles);
         }
 
-        internal void DumpNode(string rootPath, Node currentNode, bool decompressFiles)
+        internal void DumpNode(string path, Node currentNode, bool decompressFiles)
         {
-            if (!Directory.Exists(rootPath))
-            {
-                throw new ArgumentException("The RootPath must be an existing folder!");
-            }
-
-            string path = rootPath + "\\" + currentNode.Name;
-
-            Directory.CreateDirectory(rootPath + "\\" + currentNode.Name);
+            path = path + "\\" + currentNode.Name;
+            Directory.CreateDirectory(path);
             foreach (Entry FileEntry in currentNode.Entries)
             {
                 if (FileEntry.IsDirectory())
                 {
                     if (FileEntry.Name != "." && FileEntry.Name != "..")
                     {
-                        path = path + "\\" + FileEntry.Name;
+                        DumpNode(path, Nodes[FileEntry.DataOffset], decompressFiles);
                     }
                 }
                 else
