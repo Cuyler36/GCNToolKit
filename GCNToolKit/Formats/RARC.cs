@@ -115,9 +115,7 @@ namespace GCNToolKit.Formats
             public ushort NameHash { get; internal set; }
             /// <summary>Type of entry. 0x2 = Directory, 0x11 = File.</summary>
             public byte Type { get; internal set; }
-            /// <summary>Padding byte. Included here for the sake of documentation. </summary>
-            public byte Padding { get; internal set; }
-            public ushort NameOffset { get; internal set; }
+            public uint NameOffset { get; internal set; }
             /// <summary>File/subdirectory name.</summary>
             public string Name { get; internal set; }
             public uint DataOffset { get; internal set; }
@@ -125,7 +123,7 @@ namespace GCNToolKit.Formats
             /// <summary>Data bytes. If this entry is a directory, it will be the node index.</summary>
             public byte[] Data { get; internal set; }
             /// <summary>Always zero.</summary>
-            public uint ZeroPadding { get; internal set; }
+            public uint MemoryPointer { get; internal set; }
 
             // Non actual struct items
 
@@ -135,12 +133,25 @@ namespace GCNToolKit.Formats
             // True if the data resides in area that is marked compressed
             public bool IsMarkedCompressed { get; internal set; }
 
+            public bool IsFile()
+                => (Type & 1) == 1;
+
+            public bool IsCompressedFile()
+                => (Type & 4) != 0;
+
             /// <summary>Whether or not this entry is a directory.</summary>
             public bool IsDirectory()
-                => ID == 0xFFFF || Type == 0x02;
+                => ID == 0xFFFF || (Type & 2) != 0;
 
-            public bool IsFile()
-                => Type == 0x11;
+            public bool FetchFromRAM() => (Type & 0x10) != 0;
+
+            public bool FetchFromARAM() => (Type & 0x20) != 0;
+
+            public bool FetchFromDVD() => (Type & 0x40) != 0;
+
+            public bool IsSZSCompressed() => IsCompressedFile() && (Type & 0x80) != 0;
+
+            public bool IsSZPCompressed() => IsCompressedFile() && (Type & 0x80) == 0;
 
             public override string ToString()
             {
@@ -177,11 +188,10 @@ namespace GCNToolKit.Formats
                         ID = BitConverter.ToUInt16(Data, EntryOffset).Reverse(),
                         NameHash = BitConverter.ToUInt16(Data, EntryOffset + 2).Reverse(),
                         Type = Data[EntryOffset + 4],
-                        Padding = Data[EntryOffset + 5],
-                        NameOffset = BitConverter.ToUInt16(Data, EntryOffset + 6).Reverse(),
+                        NameOffset = BitConverter.ToUInt32(Data, EntryOffset + 4).Reverse() & 0x00FFFFFF,
                         DataOffset = BitConverter.ToUInt32(Data, EntryOffset + 8).Reverse(),
                         Size = BitConverter.ToUInt32(Data, EntryOffset + 0xC).Reverse(),
-                        ZeroPadding = BitConverter.ToUInt32(Data, EntryOffset + 0x10).Reverse()
+                        MemoryPointer = BitConverter.ToUInt32(Data, EntryOffset + 0x10).Reverse()
                     };
 
                     node.Entries[i].Name = ReadStringTableString(Data, node.Entries[i].NameOffset);
@@ -231,13 +241,16 @@ namespace GCNToolKit.Formats
                     var data = FileEntry.Data;
                     if (decompressFiles && FileEntry.IsMarkedCompressed)
                     {
-                        if (Yaz0.IsYaz0(data))
+                        if (FileEntry.IsCompressedFile())
                         {
-                            data = Yaz0.Decompress(data);
-                        }
-                        else if (Yay0.IsYay0(data))
-                        {
-                            data = Yay0.Decompress(data);
+                            if (FileEntry.IsSZPCompressed() && Yay0.IsYay0(data))
+                            {
+                                data = Yay0.Decompress(data);
+                            }
+                            else if (FileEntry.IsSZSCompressed() && Yaz0.IsYaz0(data))
+                            {
+                                data = Yaz0.Decompress(data);
+                            }
                         }
                     }
                     using (var Stream = File.Create(path + "\\" + FileEntry.Name))
@@ -264,5 +277,7 @@ namespace GCNToolKit.Formats
 
             return Encoding.ASCII.GetString(StringBytes.ToArray());
         }
+
+
     }
 }
