@@ -9,9 +9,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="BinaryX">
-      <HintPath>..\..\BinaryX\BinaryX\bin\Release\netcoreapp3.0\BinaryX.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\BinaryX\BinaryX.csproj" />
   </ItemGroup>
 
 </Project>
