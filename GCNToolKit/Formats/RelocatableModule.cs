@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
 using BinaryX;
 
@@ -195,6 +192,7 @@ namespace GCNToolKit.Formats
                     relocations.Add(relocation);
                     if (relocation.Type == RelocationType.R_DOLPHIN_END) break;
                 }
+                Imports[i].Relocations = relocations.ToArray();
             }
         }
     }
