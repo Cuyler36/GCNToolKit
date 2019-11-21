@@ -54,4 +54,19 @@
         RGB5A1,
         RGBA8
     }
+
+    public enum ArchiveType
+    {
+        MemoryArchive,
+        AramArchive,
+        DvdArchive,
+        Compressed
+    }
+
+    public enum CompressionType
+    {
+        None = -1,
+        SZP = 0,
+        SZS = 1
+    }
 }
