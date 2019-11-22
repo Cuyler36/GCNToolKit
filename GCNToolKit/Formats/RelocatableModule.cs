@@ -185,7 +185,7 @@ namespace GCNToolKit.Formats
 
                 // Load relocations
                 var relocations = new List<Relocation>();
-                reader.Seek(ModuleHeader.RelocationTableOffset + Imports[i].Offset);
+                reader.Seek(Imports[i].Offset);
                 while (true)
                 {
                     var relocation = new Relocation(reader);
