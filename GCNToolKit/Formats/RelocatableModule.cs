@@ -107,6 +107,10 @@ namespace GCNToolKit.Formats
 
             public uint Offset;
             public uint Size;
+
+            public int Id;
+            public byte[] Data;
+
             public bool IsExecutable() => (Offset & SECT_EXEC) != 0;
             public uint GetOffset() => (Offset & SECT_OFFS);
 
@@ -114,6 +118,12 @@ namespace GCNToolKit.Formats
             {
                 Offset = reader.ReadUInt32();
                 Size = reader.ReadUInt32();
+
+                // Read data
+                var currentOffset = reader.Position;
+                reader.Seek(GetOffset());
+                Data = reader.ReadBytes((int)Size);
+                reader.Seek(currentOffset);
             }
         }
 
@@ -174,6 +184,7 @@ namespace GCNToolKit.Formats
             for (var i = 0; i < Sections.Length; i++)
             {
                 Sections[i] = new Section(reader);
+                Sections[i].Id = i;
             }
 
             // Initialize Imports & Relocations
