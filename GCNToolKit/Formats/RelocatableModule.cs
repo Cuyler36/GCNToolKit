@@ -62,6 +62,8 @@ namespace GCNToolKit.Formats
             // Version >= 3
             public uint FixSize;
 
+            public Header() { }
+
             public Header(BinaryReaderX reader)
             {
                 ModuleId = reader.ReadUInt32();
