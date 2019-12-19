@@ -35,9 +35,19 @@ namespace GCNToolKit.Formats
         /// </summary>
         /// <param name="data">The RARC file data</param>
         /// <param name="name">The name of the RARC archive</param>
-        public RARC(in byte[] data, string name)
+        public RARC(byte[] data, string name)
         {
             FileName = name;
+
+            if (Yay0.IsYay0(data))
+            {
+                data = Yay0.Decompress(data);
+            }
+            else if (Yaz0.IsYaz0(data))
+            {
+                data = Yaz0.Decompress(data);
+            }
+
             Header = new RARCHeader(data);
             ReadNodes(data);
         }
@@ -90,7 +100,7 @@ namespace GCNToolKit.Formats
             public uint ArchiveInfoSize;
             public uint DataSize; // Total size of data in file
             public uint Unknown1;
-            public uint AramDataSize; // Size of compressed data in file
+            public uint AramDataSize; // Size of ARAM-destined data in file
             public uint Unknown5;
 
             // Info Struct
